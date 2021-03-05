@@ -1,9 +1,10 @@
 pragma solidity 0.5.13;
-
+// マルチシグウォレットコントラクトをインポートｓ
 import "./GSNMultiSigWallet.sol";
 
 
 /// @title Multisignature wallet with daily limit - Allows an owner to withdraw a daily limit without multisig.
+// 一人のコントラクト所有者が複数署名無しに引き出せる一日の限界を表すコントラクト
 /// @author Stefan George - <stefan.george@consensys.net>
 contract GSNMultiSigWalletWithDailyLimit is GSNMultiSigWallet {
 
@@ -26,31 +27,21 @@ contract GSNMultiSigWalletWithDailyLimit is GSNMultiSigWallet {
     /// @param _owners List of initial owners.
     /// @param _required Number of required confirmations.
     /// @param _dailyLimit Amount in wei, which can be withdrawn without confirmations on a daily basis.
-    function initialize(address[] memory _owners, uint _required, uint _dailyLimit)
-        public initializer
-    {
+    function initialize(address[] memory _owners, uint _required, uint _dailyLimit) public initializer {
         GSNMultiSigWallet.initialize(_owners, _required);
         dailyLimit = _dailyLimit;
     }
 
     /// @dev Allows to change the daily limit. Transaction has to be sent by wallet.
     /// @param _dailyLimit Amount in wei.
-    function changeDailyLimit(uint _dailyLimit)
-        public
-        onlyWallet
-    {
+    function changeDailyLimit(uint _dailyLimit) public onlyWallet {
         dailyLimit = _dailyLimit;
         emit DailyLimitChange(_dailyLimit);
     }
 
     /// @dev Allows anyone to execute a confirmed transaction or ether withdraws until daily limit is reached.
     /// @param transactionId Transaction ID.
-    function executeTransaction(uint transactionId)
-        public
-        ownerExists(_msgSender())
-        confirmed(transactionId, _msgSender())
-        notExecuted(transactionId)
-    {
+    function executeTransaction(uint transactionId) public ownerExists(_msgSender()) confirmed(transactionId, _msgSender()) notExecuted(transactionId) {
         Transaction storage txn = transactions[transactionId];
         bool _confirmed = isConfirmed(transactionId);
         if (_confirmed || txn.data.length == 0 && isUnderLimit(txn.value)) {
@@ -74,10 +65,7 @@ contract GSNMultiSigWalletWithDailyLimit is GSNMultiSigWallet {
     /// @dev Returns if amount is within daily limit and resets spentToday after one day.
     /// @param amount Amount to withdraw.
     /// @return Returns if amount is under daily limit.
-    function isUnderLimit(uint amount)
-        internal
-        returns (bool)
-    {
+    function isUnderLimit(uint amount) internal returns (bool) {
         if (now > lastDay + 24 hours) {
             lastDay = now;
             spentToday = 0;
@@ -92,11 +80,7 @@ contract GSNMultiSigWalletWithDailyLimit is GSNMultiSigWallet {
      */
     /// @dev Returns maximum withdraw amount.
     /// @return Returns amount.
-    function calcMaxWithdraw()
-        public
-        view
-        returns (uint)
-    {
+    function calcMaxWithdraw() public view returns (uint) {
         if (now > lastDay + 24 hours)
             return dailyLimit;
         if (dailyLimit < spentToday)
