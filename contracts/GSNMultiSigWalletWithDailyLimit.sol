@@ -42,16 +42,23 @@ contract GSNMultiSigWalletWithDailyLimit is GSNMultiSigWallet {
     /// @dev Allows anyone to execute a confirmed transaction or ether withdraws until daily limit is reached.
     /// @param transactionId Transaction ID.
     function executeTransaction(uint transactionId) public ownerExists(_msgSender()) confirmed(transactionId, _msgSender()) notExecuted(transactionId) {
+        // IDからトランザクションデータを取得する。
         Transaction storage txn = transactions[transactionId];
+        // 確認済みとする。
         bool _confirmed = isConfirmed(transactionId);
         if (_confirmed || txn.data.length == 0 && isUnderLimit(txn.value)) {
+            // 実行済みフラグをONにする。
             txn.executed = true;
             if (!_confirmed)
                 spentToday += txn.value;
+            // external_call()関数の戻り値がtrueなら実行する。falseなら取り消す。
             if (external_call(txn.destination, txn.value, txn.data.length, txn.data))
+                // イベントの呼び出し
                 emit Execution(transactionId);
             else {
+                // イベントの呼び出し
                 emit ExecutionFailure(transactionId);
+                // 実行済みフラグをOFFにする。
                 txn.executed = false;
                 if (!_confirmed)
                     spentToday -= txn.value;
@@ -67,7 +74,7 @@ contract GSNMultiSigWalletWithDailyLimit is GSNMultiSigWallet {
     /// @return Returns if amount is under daily limit.
     function isUnderLimit(uint amount) internal returns (bool) {
         if (now > lastDay + 24 hours) {
-            lastDay = now;
+            lastDay = block.timestamp;
             spentToday = 0;
         }
         if (spentToday + amount > dailyLimit || spentToday + amount < spentToday)

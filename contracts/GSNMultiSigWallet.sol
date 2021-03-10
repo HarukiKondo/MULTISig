@@ -51,9 +51,10 @@ contract GSNMultiSigWallet is GSNRecipient {
 
     /*
      *  Modifiers
+     *  各関数修飾子を定義する。(関数の呼び出し時に実行するため。)
      */
     modifier onlyWallet() {
-        // コントラクト作成者であること
+        // コントラクト自身であること
         require(_msgSender() == address(this));
         _;
     }
@@ -94,10 +95,8 @@ contract GSNMultiSigWallet is GSNRecipient {
     }
 
     modifier validRequirement(uint ownerCount, uint _required) {
-        require(ownerCount <= MAX_OWNER_COUNT
-            && _required <= ownerCount
-            && _required != 0
-            && ownerCount != 0);
+        // 要求された署名数の条件を満たしているかチェックする。
+        require(ownerCount <= MAX_OWNER_COUNT && _required <= ownerCount && _required != 0 && ownerCount != 0);
         _;
     }
 
@@ -120,8 +119,9 @@ contract GSNMultiSigWallet is GSNRecipient {
     /// @param _required Number of required confirmations.
     // 初期化関数
     function initialize(address[] memory _owners, uint _required) public initializer validRequirement(_owners.length, _required) {
-        GSNRecipient.initialize();
         // 初期化する。
+        GSNRecipient.initialize();
+
         for (uint i=0; i<_owners.length; i++) {
             require(!isOwner[_owners[i]] && _owners[i] != address(0));
             // コントラクト所有者とする。
@@ -207,6 +207,7 @@ contract GSNMultiSigWallet is GSNRecipient {
     /// @param transactionId Transaction ID.
     // トランザクジョンの確認を取り消す関数
     function revokeConfirmation(uint transactionId) public ownerExists(_msgSender()) confirmed(transactionId, _msgSender()) notExecuted(transactionId) {
+        // 確認を取り消す。
         confirmations[transactionId][_msgSender()] = false;
         emit Revocation(_msgSender(), transactionId);
     }
@@ -217,7 +218,9 @@ contract GSNMultiSigWallet is GSNRecipient {
     function executeTransaction(uint transactionId) public ownerExists(_msgSender()) confirmed(transactionId, _msgSender()) notExecuted(transactionId) {
         // 確認されているかチェックする。
         if (isConfirmed(transactionId)) {
+            // IDからトランザクションデータを取得する。
             Transaction storage txn = transactions[transactionId];
+            // 実行済みフラグをONにする。
             txn.executed = true;
             if (external_call(txn.destination, txn.value, txn.data.length, txn.data))
                 emit Execution(transactionId);
@@ -232,22 +235,36 @@ contract GSNMultiSigWallet is GSNRecipient {
     // of the Solidity's code generator to produce a loop that copies tx.data into memory.
     // 外部呼出し関数
     function external_call(address destination, uint value, uint dataLength, bytes memory data) internal returns (bool) {
+        // 戻り値用の変数を宣言
         bool result;
+        // 以下、アセンブリコード
         assembly {
-            let x := mload(0x40)   // "Allocate" memory for output (0x40 is where "free memory" pointer is stored by convention)
-            let d := add(data, 32) // First 32 bytes are the padded length of data, so exclude that
+            // "Allocate" memory for output (0x40 is where "free memory" pointer is stored by convention)
+            // フリーメモリを取得する。
+            let x := mload(0x40)
+            // First 32 bytes are the padded length of data, so exclude that
+            // 算術命令(data + 32)
+            let d := add(data, 32)
+            // 戻り値を取得する。
+            // 34710 is the value that solidity is currently emitting
+            // It includes callGas (700) + callVeryLow (3, to pay for SUB) + callValue TransferGas (9000) +
+            // callNewAccountGas (25000, in case the destination address does not exist and needs creating)
+            // 外部の変数？を参照する。
             result := call(
-                sub(gas, 34710),   // 34710 is the value that solidity is currently emitting
-                                   // It includes callGas (700) + callVeryLow (3, to pay for SUB) + callValueTransferGas (9000) +
-                                   // callNewAccountGas (25000, in case the destination address does not exist and needs creating)
+                // 算術命令(gas - 34710)
+                sub(gas, 34710),
+                // 送信先アドレス
                 destination,
+                // 送金額
                 value,
                 d,
-                dataLength,        // Size of the input (in bytes) - this is what fixes the padding problem
+                // トランザクションのデータサイズ
+                dataLength,
                 x,
                 0                  // Output is ignored, therefore the output size is zero
             )
         }
+        // 戻り値を返却
         return result;
     }
 
